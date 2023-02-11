@@ -162,9 +162,24 @@ If message was sent successfully, you see the following:
 
 ![](./img/thanks.png)
 
-If it failed, you are transfered to `polls/error` which displays an error message
+If it failed, you are transfered to `localhost:8000/polls/error` which displays an error message
 
 let's send a couple more messages and look at the database now. (Each message is displayed in a separate line)
 
 ![](./img/database.png)
+
+- error logging
+
+let's only launch `facade` service and try to store a message
+
+![](./img/error.png)
+
+if we try to access the database:
+
+![](./img/not-running.png)
+
+both times we get something like this logged into the console:
+
+![](./img/error-log.png)
+
 
