@@ -172,7 +172,7 @@ let's send a couple more messages and look at the database now. (Each message is
 
 let's only launch `facade` service and try to store a message
 
-![](./img/error.png)
+![](./img/error-msg.png)
 
 if we try to access the database:
 
