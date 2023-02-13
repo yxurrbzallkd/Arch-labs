@@ -57,7 +57,7 @@ bash launch-logger.sh 3
 
 ### Docker
 
-In this lab, Docker is used only to work with Hazelcast. Reason - simplicity. 
+In this lab, Docker is used only to work with Hazelcast. Reason - I couldn't create a `hazelcast.HazelcastClient` when `logger` is running in a docker container. Will try to fix in the text lab. 
 
 ### Logging
 

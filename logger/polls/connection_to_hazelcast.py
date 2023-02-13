@@ -17,7 +17,7 @@ def get_msgs():
 	hazelcast_url = os.environ.get('HAZELCAST_URL', False)
 	if not hazelcast_url:
 		print("can't find hazelcast url")
-		return False
+		return "Error occurred"
 	print("hazelcast on", hazelcast_url)
 	print("creating hazelcast client")
 	#client = hazelcast.HazelcastClient(cluster_name="message-database", cluster_members=[hazelcast_url])

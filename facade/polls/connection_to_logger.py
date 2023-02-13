@@ -13,6 +13,10 @@ def log_msg(msg):
 	for i in logger_port_ids:
 		port = i+7000
 		url = f"http://127.0.0.1:{port}/database/"
+		RUNNING_IN_DOCKER = os.environ.get('RUNNING_IN_DOCKER', False)
+		if RUNNING_IN_DOCKER:
+			print("I am running in Docker container")
+			url = f"http://host.docker.internal:{port}/database/"
 		try:
 			result = requests.post(url, json={'UUID': UUID,'msg': msg})
 			print("result", result)
@@ -30,6 +34,10 @@ def get_msgs():
 	for i in logger_port_ids:
 		port = i+7000
 		url = f"http://127.0.0.1:{port}/database/"
+		RUNNING_IN_DOCKER = os.environ.get('RUNNING_IN_DOCKER', False)
+		if RUNNING_IN_DOCKER:
+			print("I am running in Docker container")
+			url = f"http://host.docker.internal:{port}/database/"
 		try:
 			result = requests.get(url)
 			print("result", result)
