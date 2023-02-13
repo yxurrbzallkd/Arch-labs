@@ -1,185 +1,131 @@
-# Lab 1
+# Lab 3 - Microservices + Hazelcast
 
-[Requirements](https://docs.google.com/document/d/1_DCyflPIPCw0-uPTA1xNc3-8m2aUn1mloxOnP1UJ6ho/edit)
+[task](https://docs.google.com/document/d/1RWe3xIFfkMUUlI5Ai3ig5xuJvXwZ0JwCU0ZlSZ5mgC8/edit)
 
 ## Python tools
 
-Project uses [Django](https://www.djangoproject.com/) web framework and [requests](https://pypi.org/project/requests/) library.
+Project uses [Django](https://www.djangoproject.com/) web framework and [requests](https://pypi.org/project/requests/) library and [hazelcast](https://hazelcast.com/).
 
-## Code
+## Usage
 
-### Setup Django apps
+see lab1 - micro_basics branch
+
+## Process
+
+### Setup
+
+all necessary commands are in `launch.sh` file. A short version is analyzed in detail below. After launching everything this script waits for `ctrl+c`, then kills all the docker containers and servers. 
 
 ```bash
-python -m django startproject <project>
-cd <project>
-python manage.py startapp polls # use standard name for now
+# start facade
+cd facade
+python manage.py runserver 8000&
 ```
 
-### Hardcoded url's and interacting with application
+```bash
+# start messages (not necessary)
+cd ..
+cd messages
+python manage.py runserver 5000&
+```
 
-the `.sh` files intended to run the project, the respective `Dockerfile`s and all functions in the code assume that `facade` runs on `localhost:8000`, `logger` on `localhost:7000`, `messages` on `localhost:5000`
+```bash
+# start logger instances
+cd ..
+cd logger
+INSTANCE=1
+export HAZELCAST_URL="127.0.0.1:570"$INSTANCE # should figure out how to specify the url in docker
+python manage.py runserver 700$INSTANCE&
+docker run \
+    --name member-$INSTANCE\
+    --network hazelcast-network \
+    --rm \
+	-d\
+    -e HZ_CLUSTERNAME=message-database \
+    -p 570$INSTANCE:5701 \
+     hazelcast/hazelcast:5.2.1
+```
 
-To access the services go to `localhost:<port>/<polls/database/messages>/`, polls/database/messages for `facade`, `logger` and `messages` servers respectively.
+Unfortunately, you can't see the logs in the command line using the approach above. So I provided a convenient alternative: `launch-bash.sh` launches hazelcast instances, `facade` and `messages`, then waits for `ctrl+c` and upon receiving kills the docker containers and stops the severs, and `logger` isntances are launched separately like this `bash launch-logger.sh <instance_number>`.
 
-For `facade`, in order to record a message go to `localhost:8000/polls/` in order to view the database go to `localhost:8000/polls/database`, there is also a help page on `localhost:8000/polls/help`, to make a request to the `messages` service go to `localhost:8000/polls/messages`
-
-`logger` if accessed from the browser at `localhost:7000/database` also displays all messages. Later we will probably have to recognise that the request is coming from the `facade` and only send data if it is so.
-
-`messages` if accessed from the browser at `localhost:5000/messages` displays a 'Hello...Not implemented' message
+```
+bash launch-base.sh
+bash launch-logger.sh 1
+bash launch-logger.sh 2
+bash launch-logger.sh 3
+```
 
 ### Docker
 
-`Docker` introduces and unpleasant complication: to access one server running in a container from another server, also running in a local container, you need to use `http://host.docker.internal:<port>`. 
-
-Added `localhost`, 	`host.docker.internal` and  `127.0.0.1` to `ALLOWED_HOSTS` in all <facade/logger/messages>/<facade/logger/messages>/settings.py
-
-Also, when making requests from `facade` to `logger` I try reaching both `127.0.0.1` and `host.docker.internal` through try-except.
-
-We can recognize whether our application is running inside a container:
-```Docekrfile
-ENV RUNNING_IN_DOCKER Yes
-```
-then do `os.environ.get('RUNNING_IN_DOCKER', False)` - if it exists (or you can check if it is = 'Yes'), we assume we are running in Docker. There is a catch: there is no way to know how the `logger` is running from `facade`. So, for now, I simply try both links
+In this lab, Docker is used only to work with Hazelcast. Reason - simplicity. 
 
 ### Logging
 
-right now, in this basic setup, logging is done through simple `print`. 
+logging is still done through simple `print`.
 
-There is a catch when using Docker: if you are running the server in a Docker container, you need to run the container like this: `docker run ... other parameters... -it <container name>` (notice the `-it`) and the `CMD` command in the Dockerfiles should contain a `-u` flag like this: `CMD ["python", "-u", "manage.py", "runserver", "0.0.0.0:<port>"]`, other wise you won't see all the logs.
-
-Later will probably introduce the `logging` python library
-
-### The code
+### Code changes
 
 #### `facade`
 
-##### POST a message
-
-see facade/polls/views.py `get_message` function
+`logger` ports are hardcoded (7001, 7002, 7003), we try them in a random order.
 
 ```python
-def get_message(request):
-	...
-	# if this is a POST request we need to process the form data
-    if request.method == 'POST':
-		...
-        form = TheForm(request.POST)
-        if not form.is_valid():
-            return HttpRequest("invalid form")
-        msg = form.cleaned_data['msg']
-        if log_msg(msg):
-            return success
-        else:
-            return error
-    else: # if a GET (or any other method) we'll create a blank form
-        form = TheForm()
-    
-    return render(request, 'form.html', {'form': form})
-```
-
-the most important part is `log_msg`. see facade/polls/connection_to_logger.py `log_msg` function
-
-```python
+# facade/polls/connection_to_logger.py
+logger_port_ids=list(range(1,4))
 def log_msg(msg):
-	UUID = random.randint(0, 2**31)
-	...
-	url="http://127.0.0.1:7000/database/"
-	try:
-		# try to send a POST request
-	except Exception as e:
-		# maybe logger is running in Docker, try again
-		url="http://host.docker.internal:7000/database/"
+	# generate uuid
+	random.shuffle(logger_port_ids) # try ports in random order
+	for i in logger_port_ids:
+		port = i+7000
+		url = f"http://127.0.0.1:{port}/database/"
 		try:
-			# try to make a POST request
+			result = requests.post(url, json={'UUID': UUID,'msg': msg})
+			...
+			break
 		except Exception as e:
-			return False
-	...
-	return True
+			# print error
+	return success
 ```
 
-#### view the database
+#### `logger`
 
-see the facade/polls/views.py `get_messages` function
-
-```python
-def get_messages(request):
-    if request.method == 'GET':
-        return HttpResponse(get_msgs())
-    return HttpRequest("Unsupported request method")
-```
-
-the core function is function `get_msgs` from facade/polls/connection_to_logger.py
+When we launched `logger` instances, we set `HAZELCAST_URL` environment variable with url of its correspondent hazelcast instance. Later we use this variable when creating the `hazelcast` client.
 
 ```python
-def get_msgs():
-	...
-	url="http://127.0.0.1:7000/database/"
-	try:
-		# try to make a GET request
-	except Exception as e:
-		# maybe logger is running in Docker, try again
-		url="http://host.docker.internal:7000/database/"
-		try:
-			# try to make a GET request
-		except Exception as e:
-			return "Error: couldn't get messages"
-	return str(result)
+# logger/logger/hazelcast_client.py
+# imports
+hazelcast_url = os.environ.get('HAZELCAST_URL', False)
+client = hazelcast.HazelcastClient(cluster_name="message-database", cluster_members=[hazelcast_url])
 ```
 
 ## Results
 
 ```bash
 bash launch.sh # launches the servers from command line
-bash launch-docker.sh # builds and runs servers in docker containers
 ```
 
-- `logger`
+Now the testing:
 
-This is how `logger` server looks accessed from the `facade`. As you can see, right now the database is empty
+The 3 launched logger nodes. They are empty right now.
 
-![](./img/logger-from-facade.png)
+<img src=img/logger-node-1.png width=300></img>
+<img src=img/logger-node-2.png width=300></img>
+<img src=img/logger-node-3.png width=300></img>
 
-It can also be accessed from its own port like this:
+Let's send 10 messages. We expect them to be distributed randomly between the 3 nodes.
 
-![](./img/logger.png)
-
-- `messages`
-
-This is how `messages` service can be accessed from the `facade` service
-
-![](./img/messages-from-facade.png)
-
-It can also be accessed on its own port:
-
-![](./img/messages.png)
-
-- sending a message
-
-![](./img/send-message.png)
-
-If message was sent successfully, you see the following:
-
-![](./img/thanks.png)
-
-If it failed, you are transfered to `localhost:8000/polls/error` which displays an error message
-
-let's send a couple more messages and look at the database now. (Each message is displayed in a separate line)
+Here are those messages as one line of text:
 
 ![](./img/database.png)
 
-- error logging
+In the management center we can see that different messages are on different nodes.
 
-let's only launch `facade` service and try to store a message
+![](./img/nodes-distribution.png)
 
-![](./img/error.png)
+Here are what logs of the `logger` instances look like (not all messages can be seen on the screenshots, but you can get the general idea of what logs look like):
 
-if we try to access the database:
+![](./img/log-1.png)
+![](./img/log-2.png)
+![](./img/log-3.png)
 
-![](./img/not-running.png)
-
-both times we get something like this logged into the console:
-
-![](./img/error-log.png)
-
-
+* you may have noticed, that the distribution between nodes does not match the logs, that is because I used screenshots from 2 different launches of the system (forgot to go to management center and take a new screenshot on the last test).

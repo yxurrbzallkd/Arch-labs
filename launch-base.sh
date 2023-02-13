@@ -14,15 +14,13 @@ for i in ${IDS}
 do
 	echo $i "port" 700$i
 	#docker run --name logger -e HAZELCAST_URL="http://172.18.0.3:570"$i -d -p 700$i:7000 -it logger
-	export HAZELCAST_URL="http://172.18.0.3:570"$i
-	$PYTHON manage.py runserver 700$i&
 	L_ID=$!
 	LIDS="$LIDS $L_ID"
 	docker run \
     --name member-$i\
     --network hazelcast-network \
     --rm \
-	-d\
+	-d \
     -e HZ_CLUSTERNAME=message-database \
     -p 570$i:5701 \
      hazelcast/hazelcast:5.2.1
@@ -36,10 +34,6 @@ cd ..
 clenup() {
 	echo "ctrl+c happened"
 	kill $F_ID
-	for L_ID in ${LIDS}:
-	do
-		kill $L_ID
-	done
 	for i in ${IDS}
 	do
 		docker kill member-$i

@@ -3,30 +3,18 @@ from django.http import HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from .models import Entry
 from django.core import serializers
+from .connection_to_hazelcast import log_msg, get_msgs
 import json
 # Create your views here.
 @csrf_exempt
 def receive(request):
     if request.method == 'GET':
-        data = serializers.serialize( "python", Entry.objects.all() )
-        if len(data) == 0:
-            data = "no data yet"
-        else:
-            data = [i['fields'] for i in data]
-            keys = list(data[0].keys())[:2]
-            keys = keys[0].rjust(10) + " " + keys[1]
-            data = [[i[k] for k in i] for i in data]
-            #data = [str(i[0]).rjust(10)+" "+i[1] for i in data]
-            data = [i[1] for i in data]
-            #data = [keys]+data
-            #response = f"<pre>{json.dumps(data, indent=1)}</pre>"
-            data = '\n'.join(data)
-        response = f"<pre>{data}</pre>"
-        return HttpResponse(response)
+        data = get_msgs()
+        return HttpResponse(data)
     if request.method != 'POST':
         return HttpResponse("unsupported method")
     # if a POST
     msg = json.loads(request.body)
-    entry = Entry.objects.create(UUID=msg['UUID'], msg=msg['msg'])
-    print(msg)
+    if not log_msg(msg):
+        return HttpResponse("Message not logged")
     return HttpResponse("OK")

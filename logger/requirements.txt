@@ -1,1 +1,2 @@
 django
+hazelcast-python-client
