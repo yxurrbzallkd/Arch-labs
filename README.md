@@ -35,6 +35,7 @@ cd ..
 cd logger
 INSTANCE=1
 export HAZELCAST_URL="127.0.0.1:570"$INSTANCE # should figure out how to specify the url in docker
+export HZ_CLUSTERNAME="message-database" # cluster name
 python manage.py runserver 700$INSTANCE&
 docker run \
     --name member-$INSTANCE\
@@ -100,7 +101,8 @@ When we launched `logger` instances, we set `HAZELCAST_URL` environment variable
 # logger/logger/hazelcast_client.py
 # imports
 hazelcast_url = os.environ.get('HAZELCAST_URL', False)
-client = hazelcast.HazelcastClient(cluster_name="message-database", cluster_members=[hazelcast_url])
+hazelcast_cluster = os.environ.get('HZ_CLUSTERNAME', False)
+client = hazelcast.HazelcastClient(cluster_name=hazelcast_cluster, cluster_members=[hazelcast_url])
 ```
 
 ## Results
@@ -134,3 +136,22 @@ Here are what logs of the `logger` instances look like (not all messages can be 
 ![](./img/log-3.png)
 
 * you may have noticed, that the distribution between nodes does not match the logs, that is because I used screenshots from 2 different launches of the system (forgot to go to management center and take a new screenshot on the last test).
+
+Now, let's kill hazelcast instances and see if we can retrieve messages.
+
+This is the database when all hazelcast instances are running:
+
+![](./img/db-all-messages.png)
+
+Here we killed one of the instances
+
+![](./img/db-after-kill.png)
+
+And then another instance of hazelcast:
+
+![](./img/db-after-kills.png)
+
+We can see in the `facade`'s log that it tries to connect to different hazelcast instances and only succeeds on the running one:
+
+![](./img/trying.png)
+

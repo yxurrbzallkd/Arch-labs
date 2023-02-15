@@ -14,7 +14,8 @@ for i in ${IDS}
 do
 	echo $i "port" 700$i
 	#docker run --name logger -e HAZELCAST_URL="http://172.18.0.3:570"$i -d -p 700$i:7000 -it logger
-	export HAZELCAST_URL="http://172.18.0.3:570"$i
+	export HAZELCAST_URL="127.0.0.1:570"$i
+	export HZ_CLUSTERNAME="message-database"
 	$PYTHON manage.py runserver 700$i&
 	L_ID=$!
 	LIDS="$LIDS $L_ID"

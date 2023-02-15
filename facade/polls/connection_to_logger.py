@@ -17,6 +17,7 @@ def log_msg(msg):
 		if RUNNING_IN_DOCKER:
 			print("I am running in Docker container")
 			url = f"http://host.docker.internal:{port}/database/"
+		print("trying", url)
 		try:
 			result = requests.post(url, json={'UUID': UUID,'msg': msg})
 			print("result", result)
@@ -38,8 +39,9 @@ def get_msgs():
 		if RUNNING_IN_DOCKER:
 			print("I am running in Docker container")
 			url = f"http://host.docker.internal:{port}/database/"
+		print("trying", url)
 		try:
-			result = requests.get(url)
+			result = requests.get(url, timeout=10)
 			print("result", result)
 			result = result.text
 			success = True
