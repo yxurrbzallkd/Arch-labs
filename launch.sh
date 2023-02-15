@@ -2,7 +2,7 @@ PYTHON=python3
 bash installations.sh
 echo "Starting facade..."
 cd facade
-$PYTHON manage.py runserver 8000&
+#$PYTHON manage.py runserver 8000&
 F_ID=$!
 cd ..
 echo "Starting logger..."
