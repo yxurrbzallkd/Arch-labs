@@ -22,6 +22,7 @@ bash docker-kill.sh # stops everything
 |`localhost:8000/polls`|form that accepts messages|
 |`localhost:8000/polls/database`|messages stored on `logger`|
 |`localhost:8000/polls/messages`|messages stored on `messages` services (different every time - messages taken from a random instance of `messages`)|
+|`localhost:8000/polls/all`|all messages on `logger` and all `messages` instances|
 
 ## Process
 
@@ -135,4 +136,8 @@ Let's see what messages the `messages` instances received
 We can see the messages stored on `messages` instances on `localhost:8000/polls/messages` (from `facade`, as you remember it runs on port 8000). When we make this request, the page tries to address the `messages` seervices in a random order, so we get different results when refresh teh page
 
 ![](./img/mlogs.png)
+
+Let's look at all our messages together:
+
+![](./img/database-all.png)
 
