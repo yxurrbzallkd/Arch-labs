@@ -6,6 +6,7 @@ from .forms import TheForm
 
 from .connection_to_logger import log_msg, get_msgs
 from .connection_to_messages import messages_get
+from .hazelcast_client import queue
 
 def instruction(request):
     return HttpResponse("Welcome! go to polls/message to store a message, polls/database to see all messages")
@@ -22,6 +23,7 @@ def get_message(request):
             return HttpRequest("invalid form")
         # process the data in form.cleaned_data as required
         msg = form.cleaned_data['msg']
+        print("adding message to queue", queue.put(msg))
         if log_msg(msg):
             # redirect to a new URL:
             return HttpResponseRedirect('/polls/thanks')

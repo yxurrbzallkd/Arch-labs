@@ -1,4 +1,4 @@
-# Lab 3 - Microservices + Hazelcast
+# Lab 4 - Microservices + Message Queue
 
 [task](https://docs.google.com/document/d/1RWe3xIFfkMUUlI5Ai3ig5xuJvXwZ0JwCU0ZlSZ5mgC8/edit)
 
@@ -12,57 +12,13 @@ see lab1 - micro_basics branch
 
 ## Process
 
-### Setup
-
-all necessary commands are in `launch.sh` file. A short version is analyzed in detail below. After launching everything this script waits for `ctrl+c`, then kills all the docker containers and servers. 
+### Usage
 
 ```bash
-# start facade
-cd facade
-python manage.py runserver 8000&
-```
-
-```bash
-# start messages (not necessary)
-cd ..
-cd messages
-python manage.py runserver 5000&
-```
-
-```bash
-# start logger instances
-cd ..
-cd logger
-INSTANCE=1
-export HAZELCAST_URL="127.0.0.1:570"$INSTANCE # should figure out how to specify the url in docker
-export HZ_CLUSTERNAME="message-database" # cluster name
-python manage.py runserver 700$INSTANCE&
-docker run \
-    --name member-$INSTANCE\
-    --network hazelcast-network \
-    --rm \
-	-d\
-    -e HZ_CLUSTERNAME=message-database \
-    -p 570$INSTANCE:5701 \
-     hazelcast/hazelcast:5.2.1
-```
-
-Unfortunately, you can't see the logs in the command line using the approach above. So I provided a convenient alternative: `launch-bash.sh` launches hazelcast instances, `facade` and `messages`, then waits for `ctrl+c` and upon receiving kills the docker containers and stops the severs, and `logger` isntances are launched separately like this `bash launch-logger.sh <instance_number>`.
-
-```
-bash launch-base.sh
-bash launch-logger.sh 1
-bash launch-logger.sh 2
-bash launch-logger.sh 3
-```
-
-### Docker
-
-Running all servers in Docker containers is also an option. 
-```bash
-bash docker-build.sh # builds the containers
-bash docker-run.sh # runs all containers
-bash docker-kill.sh # kills all containers
+bash installations.sh # installs dependencies
+bash docker-build.sh # builds containers
+bash docker-run # runs everything
+bash docker-kill.sh # stops everything
 ```
 
 ### Logging
@@ -93,41 +49,70 @@ def log_msg(msg):
 	return success
 ```
 
-#### `logger`
-
-When we launched `logger` instances, we set `HAZELCAST_URL` environment variable with url of its correspondent hazelcast instance. Later we use this variable when creating the `hazelcast` client.
+`messages` ports are hardcoded. we try them in a random order
 
 ```python
-# logger/logger/hazelcast_client.py
-# imports
-hazelcast_url = os.environ.get('HAZELCAST_URL', False)
-hazelcast_cluster = os.environ.get('HZ_CLUSTERNAME', False)
-client = hazelcast.HazelcastClient(cluster_name=hazelcast_cluster, cluster_members=[hazelcast_url])
+# facade/polls/connection_to_messages.py
+messager_port_ids=list(range(1,3))
+
+def messages_get():
+	random.shuffle(messager_port_ids)
+	result = ""
+	for i in messager_port_ids:
+		port = i+5000
+		url = f"http://127.0.0.1:{port}/messages/"
+		RUNNING_IN_DOCKER = os.environ.get('RUNNING_IN_DOCKER', False)
+		if RUNNING_IN_DOCKER:
+			url = f"http://host.docker.internal:{port}/messages/"
+		print("trying", url)
+		try:
+			# GET request
+			break
+		except Exception as e:
+			print("error", e)
+	return result
+```
+
+apart from sending messages to the `logger`, we save them to the queue
+
+```python
+# facade/polls/views.py
+print("adding message to queue", queue.put(msg)) # line 26
+```
+
+### `messages`
+
+There is a queue between `messages` and `facade`. When launching a `messages` instance we also launch a background process that checks the queue periodically and if it is not empty - takes elements from it.
+
+```python
+# messages/polls/management/commands/command.py
+class Command(DaemonCommand):
+	def process(self, *args, **options):
+		while True:
+			sleep(1)
+			if queue.size().result() > 0:
+				value = queue.take().result()
+				entry = Entry()
+				entry.msg = value
+				entry.save()
+```
+
+```docker
+CMD "./run.sh"
+# run.sh:
+# python manage.py runserver 0.0.0.6000
+# python manage.py command # the consumer
 ```
 
 ## Results
 
-```bash
-bash launch.sh # launches the servers from command line
-```
-
 Now the testing:
 
-The 3 launched logger nodes. They are empty right now.
+We send 10 messages - msg1-10
 
-<img src=img/logger-node-1.png width=300></img>
-<img src=img/logger-node-2.png width=300></img>
-<img src=img/logger-node-3.png width=300></img>
-
-Let's send 10 messages. We expect them to be distributed randomly between the 3 nodes.
-
-Here are those messages as one line of text:
+Here are those messages as one line of text in the database:
 
 ![](./img/database.png)
-
-In the management center we can see that different messages are on different nodes.
-
-![](./img/nodes-distribution.png)
 
 Here are what logs of the `logger` instances look like (not all messages can be seen on the screenshots, but you can get the general idea of what logs look like):
 
@@ -135,23 +120,15 @@ Here are what logs of the `logger` instances look like (not all messages can be 
 ![](./img/log-2.png)
 ![](./img/log-3.png)
 
-* you may have noticed, that the distribution between nodes does not match the logs, that is because I used screenshots from 2 different launches of the system (forgot to go to management center and take a new screenshot on the last test).
+It so happened, the third `logger` instance did not receive any messages, but we can see that it responded to our request for the database.
 
-Now, let's kill hazelcast instances and see if we can retrieve messages.
+Let's see what messages the `messages` instances received
 
-This is the database when all hazelcast instances are running:
+![](./img/mlog-1.png)
 
-![](./img/db-all-messages.png)
+![](./img/mlog-2.png)
 
-Here we killed one of the instances
+We can see the messages stored on `messages` instances on `localhost:8000/polls/messages` (from `facade`, as you remember it runs on port 8000). When we make this request, the page tries to address the `messages` seervices in a random order, so we get different results when refresh teh page
 
-![](./img/db-after-kill.png)
-
-And then another instance of hazelcast:
-
-![](./img/db-after-kills.png)
-
-We can see in the `facade`'s log that it tries to connect to different hazelcast instances and only succeeds on the running one:
-
-![](./img/trying.png)
+![](./img/mlogs.png)
 

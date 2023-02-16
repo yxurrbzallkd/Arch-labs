@@ -31,6 +31,8 @@ ALLOWED_HOSTS = ['host.docker.internal', 'localhost', '127.0.0.1']
 # Application definition
 
 INSTALLED_APPS = [
+    'polls.apps.PollsConfig',
+    'django_daemon_command',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',

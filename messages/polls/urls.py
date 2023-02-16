@@ -2,5 +2,5 @@ from . import views
 from django.urls import path
 
 urlpatterns = [
-    path('', views.stump, name='empty'),
+    path('', views.process, name='return-messages'),
 ]

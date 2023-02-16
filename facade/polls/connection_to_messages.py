@@ -2,26 +2,27 @@ from django.http import HttpRequest
 import requests
 import os
 import random
+
+messager_port_ids=list(range(1,3))
+
 def messages_get():
+	print(messager_port_ids)
+	random.shuffle(messager_port_ids)
 	result = ""
-	url="http://127.0.0.1:5000/messages"
-	try:
-		result = requests.get(url)
-		print("result", result)
-		result = result.text
-	except Exception as e:
-		print("error", e)
-		SECRET_KEY = os.environ.get('RUNNING_IN_DOCKER', False)
-		if SECRET_KEY:
+	for i in messager_port_ids:
+		port = i+5000
+		url = f"http://127.0.0.1:{port}/messages/"
+		RUNNING_IN_DOCKER = os.environ.get('RUNNING_IN_DOCKER', False)
+		if RUNNING_IN_DOCKER:
 			print("I am running in Docker container")
-		print('maybe messages is running in Docker, trying again')
-		url="http://host.docker.internal:5000/messages"
+			url = f"http://host.docker.internal:{port}/messages/"
+		print("trying", url)
 		try:
 			result = requests.get(url)
 			print("result", result)
 			result = result.text
+			break
 		except Exception as e:
 			print("error", e)
-			result = "Failed to connect to messages...."
 	return result
 

@@ -1,7 +1,3 @@
-echo "launching facade"
-docker run --name facade -d -p 8000:8000 -it facade
-echo "launching messages"
-docker run --name messages -d -p 6000:6000 -it messages
 IDS="1 2 3 "
 for i in ${IDS}
 do
@@ -15,7 +11,11 @@ do
     -p 570$i:5701 \
 	-it hazelcast/hazelcast:5.2.1
 done
-
+echo "launching facade"
+docker run --name facade -d -p 8000:8000 -it facade
+echo "launching messages"
+docker run --name messages-1 -d -p 5001:6000 -it messages
+docker run --name messages-2 -d -p 5002:6000 -it messages
 for i in ${IDS}
 do
 	echo "launching logger-"$i
