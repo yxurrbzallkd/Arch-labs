@@ -8,18 +8,22 @@ Project uses [Django](https://www.djangoproject.com/) web framework and [request
 
 ## Usage
 
-see lab1 - micro_basics branch
-
-## Process
-
-### Usage
-
 ```bash
 bash installations.sh # installs dependencies
 bash docker-build.sh # builds containers
 bash docker-run # runs everything
 bash docker-kill.sh # stops everything
 ```
+
+`facade` is running on `localhost:8000`, `logging` instances are running on `localhost:7001-3`, `messages` services are running on `localhost:5001-2`.
+
+|where|what|
+|-|-|
+|`localhost:8000/polls`|form that accepts messages|
+|`localhost:8000/polls/database`|messages stored on `logger`|
+|`localhost:8000/polls/messages`|messages stored on `messages` services (different every time - messages taken from a random instance of `messages`)|
+
+## Process
 
 ### Logging
 
