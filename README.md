@@ -1,185 +1,143 @@
-# Lab 1
+# Lab 4 - Microservices + Message Queue
 
-[Requirements](https://docs.google.com/document/d/1_DCyflPIPCw0-uPTA1xNc3-8m2aUn1mloxOnP1UJ6ho/edit)
+[task](https://docs.google.com/document/d/1RWe3xIFfkMUUlI5Ai3ig5xuJvXwZ0JwCU0ZlSZ5mgC8/edit)
 
 ## Python tools
 
-Project uses [Django](https://www.djangoproject.com/) web framework and [requests](https://pypi.org/project/requests/) library.
+Project uses [Django](https://www.djangoproject.com/) web framework and [requests](https://pypi.org/project/requests/) library and [hazelcast](https://hazelcast.com/).
 
-## Code
-
-### Setup Django apps
+## Usage
 
 ```bash
-python -m django startproject <project>
-cd <project>
-python manage.py startapp polls # use standard name for now
+bash installations.sh # installs dependencies
+bash docker-build.sh # builds containers
+bash docker-run # runs everything
+bash docker-kill.sh # stops everything
 ```
 
-### Hardcoded url's and interacting with application
+`facade` is running on `localhost:8000`, `logging` instances are running on `localhost:7001-3`, `messages` services are running on `localhost:5001-2`.
 
-the `.sh` files intended to run the project, the respective `Dockerfile`s and all functions in the code assume that `facade` runs on `localhost:8000`, `logger` on `localhost:7000`, `messages` on `localhost:5000`
+|where|what|
+|-|-|
+|`localhost:8000/polls`|form that accepts messages|
+|`localhost:8000/polls/database`|messages stored on `logger`|
+|`localhost:8000/polls/messages`|messages stored on `messages` services (different every time - messages taken from a random instance of `messages`)|
+|`localhost:8000/polls/all`|all messages on `logger` and all `messages` instances|
 
-To access the services go to `localhost:<port>/<polls/database/messages>/`, polls/database/messages for `facade`, `logger` and `messages` servers respectively.
-
-For `facade`, in order to record a message go to `localhost:8000/polls/` in order to view the database go to `localhost:8000/polls/database`, there is also a help page on `localhost:8000/polls/help`, to make a request to the `messages` service go to `localhost:8000/polls/messages`
-
-`logger` if accessed from the browser at `localhost:7000/database` also displays all messages. Later we will probably have to recognise that the request is coming from the `facade` and only send data if it is so.
-
-`messages` if accessed from the browser at `localhost:5000/messages` displays a 'Hello...Not implemented' message
-
-### Docker
-
-`Docker` introduces and unpleasant complication: to access one server running in a container from another server, also running in a local container, you need to use `http://host.docker.internal:<port>`. 
-
-Added `localhost`, 	`host.docker.internal` and  `127.0.0.1` to `ALLOWED_HOSTS` in all <facade/logger/messages>/<facade/logger/messages>/settings.py
-
-Also, when making requests from `facade` to `logger` I try reaching both `127.0.0.1` and `host.docker.internal` through try-except.
-
-We can recognize whether our application is running inside a container:
-```Docekrfile
-ENV RUNNING_IN_DOCKER Yes
-```
-then do `os.environ.get('RUNNING_IN_DOCKER', False)` - if it exists (or you can check if it is = 'Yes'), we assume we are running in Docker. There is a catch: there is no way to know how the `logger` is running from `facade`. So, for now, I simply try both links
+## Process
 
 ### Logging
 
-right now, in this basic setup, logging is done through simple `print`. 
+logging is still done through simple `print`.
 
-There is a catch when using Docker: if you are running the server in a Docker container, you need to run the container like this: `docker run ... other parameters... -it <container name>` (notice the `-it`) and the `CMD` command in the Dockerfiles should contain a `-u` flag like this: `CMD ["python", "-u", "manage.py", "runserver", "0.0.0.0:<port>"]`, other wise you won't see all the logs.
-
-Later will probably introduce the `logging` python library
-
-### The code
+### Code changes
 
 #### `facade`
 
-##### POST a message
-
-see facade/polls/views.py `get_message` function
+`logger` ports are hardcoded (7001, 7002, 7003), we try them in a random order.
 
 ```python
-def get_message(request):
-	...
-	# if this is a POST request we need to process the form data
-    if request.method == 'POST':
-		...
-        form = TheForm(request.POST)
-        if not form.is_valid():
-            return HttpRequest("invalid form")
-        msg = form.cleaned_data['msg']
-        if log_msg(msg):
-            return success
-        else:
-            return error
-    else: # if a GET (or any other method) we'll create a blank form
-        form = TheForm()
-    
-    return render(request, 'form.html', {'form': form})
-```
-
-the most important part is `log_msg`. see facade/polls/connection_to_logger.py `log_msg` function
-
-```python
+# facade/polls/connection_to_logger.py
+logger_port_ids=list(range(1,4))
 def log_msg(msg):
-	UUID = random.randint(0, 2**31)
-	...
-	url="http://127.0.0.1:7000/database/"
-	try:
-		# try to send a POST request
-	except Exception as e:
-		# maybe logger is running in Docker, try again
-		url="http://host.docker.internal:7000/database/"
+	# generate uuid
+	random.shuffle(logger_port_ids) # try ports in random order
+	for i in logger_port_ids:
+		port = i+7000
+		url = f"http://127.0.0.1:{port}/database/"
 		try:
-			# try to make a POST request
+			result = requests.post(url, json={'UUID': UUID,'msg': msg})
+			...
+			break
 		except Exception as e:
-			return False
-	...
-	return True
+			# print error
+	return success
 ```
 
-#### view the database
-
-see the facade/polls/views.py `get_messages` function
+`messages` ports are hardcoded. we try them in a random order
 
 ```python
-def get_messages(request):
-    if request.method == 'GET':
-        return HttpResponse(get_msgs())
-    return HttpRequest("Unsupported request method")
+# facade/polls/connection_to_messages.py
+messager_port_ids=list(range(1,3))
+
+def messages_get():
+	random.shuffle(messager_port_ids)
+	result = ""
+	for i in messager_port_ids:
+		port = i+5000
+		url = f"http://127.0.0.1:{port}/messages/"
+		RUNNING_IN_DOCKER = os.environ.get('RUNNING_IN_DOCKER', False)
+		if RUNNING_IN_DOCKER:
+			url = f"http://host.docker.internal:{port}/messages/"
+		print("trying", url)
+		try:
+			# GET request
+			break
+		except Exception as e:
+			print("error", e)
+	return result
 ```
 
-the core function is function `get_msgs` from facade/polls/connection_to_logger.py
+apart from sending messages to the `logger`, we save them to the queue
 
 ```python
-def get_msgs():
-	...
-	url="http://127.0.0.1:7000/database/"
-	try:
-		# try to make a GET request
-	except Exception as e:
-		# maybe logger is running in Docker, try again
-		url="http://host.docker.internal:7000/database/"
-		try:
-			# try to make a GET request
-		except Exception as e:
-			return "Error: couldn't get messages"
-	return str(result)
+# facade/polls/views.py
+print("adding message to queue", queue.put(msg)) # line 26
+```
+
+### `messages`
+
+There is a queue between `messages` and `facade`. When launching a `messages` instance we also launch a background process that checks the queue periodically and if it is not empty - takes elements from it.
+
+```python
+# messages/polls/management/commands/command.py
+class Command(DaemonCommand):
+	def process(self, *args, **options):
+		while True:
+			sleep(1)
+			if queue.size().result() > 0:
+				value = queue.take().result()
+				entry = Entry()
+				entry.msg = value
+				entry.save()
+```
+
+```docker
+CMD "./run.sh"
+# run.sh:
+# python manage.py runserver 0.0.0.6000
+# python manage.py command # the consumer
 ```
 
 ## Results
 
-```bash
-bash launch.sh # launches the servers from command line
-bash launch-docker.sh # builds and runs servers in docker containers
-```
+Now the testing:
 
-- `logger`
+We send 10 messages - msg1-10
 
-This is how `logger` server looks accessed from the `facade`. As you can see, right now the database is empty
-
-![](./img/logger-from-facade.png)
-
-It can also be accessed from its own port like this:
-
-![](./img/logger.png)
-
-- `messages`
-
-This is how `messages` service can be accessed from the `facade` service
-
-![](./img/messages-from-facade.png)
-
-It can also be accessed on its own port:
-
-![](./img/messages.png)
-
-- sending a message
-
-![](./img/send-message.png)
-
-If message was sent successfully, you see the following:
-
-![](./img/thanks.png)
-
-If it failed, you are transfered to `localhost:8000/polls/error` which displays an error message
-
-let's send a couple more messages and look at the database now. (Each message is displayed in a separate line)
+Here are those messages as one line of text in the database:
 
 ![](./img/database.png)
 
-- error logging
+Here are what logs of the `logger` instances look like (not all messages can be seen on the screenshots, but you can get the general idea of what logs look like):
 
-let's only launch `facade` service and try to store a message
+![](./img/log-1.png)
+![](./img/log-2.png)
+![](./img/log-3.png)
 
-![](./img/error-msg.png)
+It so happened, the third `logger` instance did not receive any messages, but we can see that it responded to our request for the database.
 
-if we try to access the database:
+Let's see what messages the `messages` instances received
 
-![](./img/not-running.png)
+![](./img/mlog-1.png)
 
-both times we get something like this logged into the console:
+![](./img/mlog-2.png)
 
-![](./img/error-log.png)
+We can see the messages stored on `messages` instances on `localhost:8000/polls/messages` (from `facade`, as you remember it runs on port 8000). When we make this request, the page tries to address the `messages` seervices in a random order, so we get different results when refresh teh page
 
+![](./img/mlogs.png)
+
+Let's look at all our messages together:
+
+![](./img/database-all.png)
 
