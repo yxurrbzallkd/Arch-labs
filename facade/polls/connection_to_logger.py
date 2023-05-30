@@ -2,49 +2,51 @@ from django.http import HttpRequest
 import requests
 import os
 import random
+import consul
+
+
 def log_msg(msg):
+	c = None
+	if os.environ.get('RUNNING_IN_DOCKER', False):
+		c = consul.Consul("host.docker.internal")
+	else:
+		c = consul.Consul()
+	services = list(c.catalog.node('loggers')[1]['Services'].values())
+	urls = [f"http://{i['Address']}:{i['Port']}" for i in services]
+	random.shuffle(urls)
+	print("connected to consul, logger urls are", urls)
 	UUID = random.randint(0, 2**31)
+	success = False
 	print("sending message", msg, 'UUID', UUID)
-	url="http://127.0.0.1:7000/database/"
-	try:
-		result = requests.post(url, json={'UUID': UUID,'msg': msg})
-		print("result", result)
-	except Exception as e:
-		print("error", e)
-		SECRET_KEY = os.environ.get('RUNNING_IN_DOCKER', False)
-		if SECRET_KEY:
-			print("I am running in Docker container")
-		print('maybe logger is running in Docker, trying again')
-		url="http://host.docker.internal:7000/database/"
+	for url in urls:
+		print("trying", url)
 		try:
 			result = requests.post(url, json={'UUID': UUID,'msg': msg})
 			print("result", result)
+			success = True
+			print("successfully logged the message")
+			break
 		except Exception as e:
-			print("error", e)
-			return False
-	print("successfully logged the message")
-	return True
+			print("url", url, "error", e)
+	return success
 
 def get_msgs():
-	print("getting messages")
-	result = ""
-	url="http://127.0.0.1:7000/database/"
-	try:
-		result = requests.get(url)
-		print("result", result)
-		result = result.text
-	except Exception as e:
-		print("error", e)
-		SECRET_KEY = os.environ.get('RUNNING_IN_DOCKER', False)
-		if SECRET_KEY:
-			print("I am running in Docker container")
-		print('maybe logger is running in Docker, trying again')
-		url="http://host.docker.internal:7000/database/"
+	c = None
+	if os.environ.get('RUNNING_IN_DOCKER', False):
+		c = consul.Consul("host.docker.internal")
+	else:
+		c = consul.Consul()
+	services = list(c.catalog.node('loggers')[1]['Services'].values())
+	urls = [f"http://{i['Address']}:{i['Port']}" for i in services]
+	random.shuffle(urls)
+	for url in urls:
+		print("trying", url)
 		try:
-			result = requests.get(url)
+			result = requests.get(url, timeout=10)
 			print("result", result)
 			result = result.text
+			success = True
+			break
 		except Exception as e:
-			print("error", e)
-			return "Error: couldn't get messages"
+			print("url", url, "error", e)
 	return str(result)

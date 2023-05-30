@@ -8,5 +8,6 @@ urlpatterns = [
     path('thanks', views.thank, name='thank-you'),
     path('error', views.error, name='log-error'),
     path('database', views.get_messages, name='get-messages'),
-    path('messages', views.messages_get_request, name='messages')
+    path('messages', views.messages_get_request, name='messages'),
+    path('all', views.get_all, name='all-messages')
 ]
