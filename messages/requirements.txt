@@ -1,1 +1,4 @@
 django
+hazelcast-python-client
+django-daemon-command
+python-consul
